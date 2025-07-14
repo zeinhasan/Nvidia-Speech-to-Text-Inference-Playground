@@ -1,10 +1,11 @@
 streamlit
 pytubefix
+ffmpeg-python
 librosa
+numba
+llvmlite
 torch
+torchaudio
 transformers
 datasets
-torchaudio
 accelerate
-moviepy
-imageio-ffmpeg

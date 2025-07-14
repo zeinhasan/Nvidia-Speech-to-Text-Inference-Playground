@@ -1,22 +1,23 @@
 import streamlit as st
-import tempfile
-import torch
-import librosa
+import os
 from pytubefix import YouTube
 from pytubefix.cli import on_progress
-from moviepy.editor import AudioFileClip
+import ffmpeg
+import tempfile
+import librosa
+import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
-# 1. Load Whisper Model dan buat pipeline
+# Load model sekali saja
 @st.cache_resource(show_spinner=False)
 def load_model_cached():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.float16 if device == "cuda" else torch.float32
+    torch_dtype = torch.float16 if device == "cuda" else torch.float32
     model_id = "openai/whisper-small"
 
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         model_id,
-        torch_dtype=dtype,
+        torch_dtype=torch_dtype,
         low_cpu_mem_usage=True,
         use_safetensors=True,
     ).to(device)
@@ -28,55 +29,60 @@ def load_model_cached():
         model=model,
         tokenizer=processor.tokenizer,
         feature_extractor=processor.feature_extractor,
-        torch_dtype=dtype,
+        torch_dtype=torch_dtype,
         device=device,
     )
     return pipe
 
+# Fungsi wrapper progress model
 def load_asr_model_with_progress(progress_callback):
-    progress_callback(10, "📦 Loading Whisper model...")
+    progress_callback(0, "Loading model... (0%)")
+    progress_callback(20, "Downloading model files...")
     pipe = load_model_cached()
-    progress_callback(100, "✅ Model loaded")
+    progress_callback(100, "Model loaded ✅")
     return pipe
 
-# 2. Konversi MP4 ke WAV dengan moviepy
-def convert_to_wav_moviepy(video_path, audio_path):
-    audio_clip = AudioFileClip(video_path)
-    audio_clip = audio_clip.set_fps(16000).set_channels(1)
-    audio_clip.write_audiofile(audio_path, fps=16000)
+# Konversi MP4 ke WAV menggunakan ffmpeg-python
+def convert_to_wav_ffmpeg(video_path, audio_path):
+    (
+        ffmpeg
+        .input(video_path)
+        .output(audio_path, ac=1, ar='16000')
+        .run(quiet=True, overwrite_output=True)
+    )
 
-# 3. Download YouTube audio & convert ke WAV
+# Fungsi download dan ekstrak audio
 def download_and_extract_audio(youtube_url, progress_callback):
     try:
-        progress_callback(10, "🔗 Downloading YouTube audio...")
+        progress_callback(10, "Downloading YouTube audio...")
         yt = YouTube(youtube_url, on_progress_callback=on_progress)
-        stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
 
+        stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
         if stream is None:
             raise ValueError("No audio stream found.")
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_vid:
-            video_path = temp_vid.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
+            video_path = temp_video.name
             stream.download(filename=video_path)
 
-        progress_callback(60, "🎛️ Converting to WAV...")
+        progress_callback(60, "Converting to WAV...")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             audio_path = temp_audio.name
-            convert_to_wav_moviepy(video_path, audio_path)
+            convert_to_wav_ffmpeg(video_path, audio_path)
 
-        progress_callback(100, "🎧 Audio siap!")
+        progress_callback(100, "Audio ready ✅")
         return audio_path
 
     except Exception as e:
-        st.error(f"❌ Gagal mengunduh/konversi: {e}")
+        st.error(f"❌ Gagal mengunduh atau mengonversi: {e}")
         raise
 
-# 4. Transkripsi audio WAV
+# Fungsi transkripsi
 def transcribe_audio(audio_path, pipe, progress_callback):
-    waveform, sr = librosa.load(audio_path, sr=16000)
-    sample = {"array": waveform, "sampling_rate": sr}
+    waveform, sample_rate = librosa.load(audio_path, sr=16000)
+    sample = {"array": waveform, "sampling_rate": sample_rate}
 
-    progress_callback(10, "🧠 Running transcription...")
+    progress_callback(10, "Running transcription...")
     result = pipe(
         sample,
         return_timestamps=True,
@@ -84,53 +90,54 @@ def transcribe_audio(audio_path, pipe, progress_callback):
         stride_length_s=(5, 5),
     )
 
-    progress_callback(100, "✅ Transkripsi selesai")
+    segments = result["chunks"]
+    progress_callback(100, "Transcription completed ✅")
     return [
         {
             "start": round(seg["timestamp"][0], 2),
             "end": round(seg["timestamp"][1], 2),
             "text": seg["text"].strip()
         }
-        for seg in result["chunks"]
+        for seg in segments
     ]
 
-# 5. Streamlit UI
-st.set_page_config(page_title="YouTube ASR Transcriber", layout="centered")
-st.title("🎙️ YouTube Audio Transcriber with Timestamps")
+# Streamlit UI
+st.title("🎙️ YouTube Audio Transcriber with Timestamp")
 
-youtube_url = st.text_input("🔗 Masukkan Link YouTube:")
+youtube_url = st.text_input("Masukkan Link YouTube:", "")
 
 if youtube_url:
     st.video(youtube_url)
 
-    if st.button("🚀 Mulai Transkripsi"):
-        # Step 1: Load model
+    if st.button("🚀 Start Transcription"):
+        # Load model
         st.subheader("1️⃣ Load Model")
-        model_prog = st.progress(0, text="⏳ Memuat model...")
-        pipe = load_asr_model_with_progress(lambda v, t: model_prog.progress(v, text=t))
+        model_progress = st.progress(0, text="Initializing model...")
+        pipe = load_asr_model_with_progress(lambda val, msg: model_progress.progress(val, text=msg))
 
-        # Step 2: Download dan konversi
+        # Download dan konversi audio
         st.subheader("2️⃣ Download & Convert Audio")
-        audio_prog = st.progress(0, text="⏳ Mengunduh video...")
-        audio_path = download_and_extract_audio(youtube_url, lambda v, t: audio_prog.progress(v, text=t))
+        audio_progress = st.progress(0, text="Downloading...")
+        audio_path = download_and_extract_audio(youtube_url, lambda val, msg: audio_progress.progress(val, text=msg))
 
-        st.success("✅ Audio WAV berhasil dibuat!")
+        st.success("🎧 Audio siap!")
         with open(audio_path, "rb") as f:
             st.download_button("⬇️ Download Audio WAV", f, file_name="audio.wav")
 
-        # Step 3: Transkripsi
-        st.subheader("3️⃣ Transkripsi")
-        trans_prog = st.progress(0, text="🧠 Menjalankan transkripsi...")
-        segments = transcribe_audio(audio_path, pipe, lambda v, t: trans_prog.progress(v, text=t))
+        # Transkripsi
+        st.subheader("3️⃣ Transcribe Audio")
+        transcribe_progress = st.progress(0, text="Memulai transkripsi...")
+        segments = transcribe_audio(audio_path, pipe, lambda val, msg: transcribe_progress.progress(val, text=msg))
 
-        # Step 4: Tampilkan hasil
-        st.success("📄 Transkripsi selesai!")
-        st.subheader("📄 Hasil Transkripsi dengan Timestamp")
+        st.success("✅ Transkripsi selesai!")
 
+        # Hasil
+        st.subheader("📄 Hasil Transkripsi")
         full_text = ""
         for seg in segments:
             line = f"{seg['start']}s - {seg['end']}s: {seg['text']}"
-            st.markdown(f"🕒 `{seg['start']}s - {seg['end']}s` → {seg['text']}")
             full_text += line + "\n"
+            st.markdown(f"🕒 `{seg['start']}s - {seg['end']}s` → {seg['text']}")
 
+        # Tombol download hasil transkripsi
         st.download_button("⬇️ Download Transkripsi (.txt)", full_text, file_name="transkripsi.txt")
