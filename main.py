@@ -1,36 +1,40 @@
 import streamlit as st
-from nemo.collections.asr.models import ASRModel
 import tempfile
-import os
+import torch
+import nemo.collections.asr as nemo_asr
 
-# Load model once at start
+st.set_page_config(page_title="🎙️ NeMo ASR CPU", layout="centered")
+
 @st.cache_resource
-def load_model():
-    return ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
+def load_model_cpu():
+    # Load NeMo ASR model dan paksa ke CPU
+    model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
+    return model.to(torch.device("cpu"))
 
-asr_model = load_model()
+asr_model = load_model_cpu()
 
-st.title("🎙️ NeMo ASR Transcriber with Timestamp")
-st.write("Upload file `.wav` untuk ditranskrip otomatis.")
+st.title("🎙️ NeMo ASR Transcription (CPU Only)")
+st.markdown(
+    "Upload file `.wav` (mono, 16kHz) untuk ditranskripsi menggunakan model "
+    "**Parakeet-TDT 0.6B** dari NVIDIA NeMo Toolkit."
+)
 
-uploaded_file = st.file_uploader("Upload Audio", type=["wav"])
+uploaded_file = st.file_uploader("📁 Upload Audio", type=["wav"])
 
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        tmp_file_path = tmp_file.name
+    # Simpan ke file sementara
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        tmp.write(uploaded_file.read())
+        tmp_path = tmp.name
 
-    st.audio(tmp_file_path)
+    st.audio(tmp_path)
 
-    with st.spinner("⏳ Transcribing..."):
-        output = asr_model.transcribe([tmp_file_path], timestamps=True)
-        word_timestamps = output[0].timestamp['word']
-        segment_timestamps = output[0].timestamp['segment']
-    
-    st.success("✅ Transcription completed!")
+    with st.spinner("⏳ Transcribing on CPU (this may take 1–2 minutes)..."):
+        output = asr_model.transcribe([tmp_path], timestamps=True)
+        segments = output[0].timestamp['segment']
 
-    st.subheader("📄 Transcription with Timestamps")
-    for stamp in segment_timestamps:
-        st.write(f"🕒 {stamp['start']}s - {stamp['end']}s: {stamp['segment']}")
+    st.success("✅ Transcription Completed!")
+    st.subheader("📄 Transcription with Segments & Timestamps")
 
-    os.remove(tmp_file_path)
+    for seg in segments:
+        st.write(f"🕒 `{seg['start']}s` - `{seg['end']}s`: {seg['segment']}")
