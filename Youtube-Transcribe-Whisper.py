@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from pytube import YouTube
-from moviepy.editor import VideoFileClip
+import ffmpeg
 import tempfile
 import librosa
 import torch
@@ -37,6 +37,15 @@ def load_asr_model():
 
 pipe = load_asr_model()
 
+# Konversi MP4 ke WAV menggunakan ffmpeg-python
+def convert_to_wav_ffmpeg(video_path, audio_path):
+    (
+        ffmpeg
+        .input(video_path)
+        .output(audio_path, ac=1, ar='16000')  # Mono, 16kHz
+        .run(quiet=True, overwrite_output=True)
+    )
+
 # Fungsi download dan ekstrak audio
 def download_and_extract_audio(youtube_url):
     yt = YouTube(youtube_url)
@@ -46,12 +55,10 @@ def download_and_extract_audio(youtube_url):
         video_path = temp_video.name
         video_stream.download(filename=video_path)
 
-    # Konversi ke WAV dengan moviepy
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         audio_path = temp_audio.name
-        clip = VideoFileClip(video_path)
-        clip.audio.write_audiofile(audio_path, codec='pcm_s16le', fps=16000, verbose=False, logger=None)
-    
+        convert_to_wav_ffmpeg(video_path, audio_path)
+
     return audio_path
 
 # Fungsi transkripsi
@@ -109,4 +116,3 @@ if youtube_url:
 
         for seg in transcribed_segments:
             st.markdown(f"🕒 `{seg['start']}s - {seg['end']}s` → {seg['text']}")
-
