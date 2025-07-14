@@ -37,11 +37,10 @@ def load_model():
 # ---------------------- Convert m4a to wav ----------------------
 def convert_any_audio_to_wav(input_path):
     try:
-        # Deteksi format dari ekstensi
-        ext = os.path.splitext(input_path)[1][1:]  # Contoh: 'webm', 'm4a'
+        ext = os.path.splitext(input_path)[1][1:].lower()  # contoh: 'webm'
 
         audio = AudioSegment.from_file(input_path, format=ext)
-        audio = audio.set_frame_rate(16000).set_channels(1)  # Mono + 16kHz
+        audio = audio.set_frame_rate(16000).set_channels(1)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as out_file:
             wav_path = out_file.name
@@ -50,6 +49,7 @@ def convert_any_audio_to_wav(input_path):
         return wav_path
     except Exception as e:
         raise RuntimeError(f"Gagal mengonversi audio: {e}")
+
 
 # ---------------------- Download YouTube Audio ----------------------
 def download_audio_fallback(youtube_url, progress_callback):
