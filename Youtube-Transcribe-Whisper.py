@@ -13,7 +13,7 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 def load_asr_model():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
-    model_id = "openai/whisper-medium"
+    model_id = "openai/whisper-small"
 
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         model_id,
