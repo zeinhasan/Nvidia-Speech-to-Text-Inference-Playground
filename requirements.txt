@@ -1,0 +1,6 @@
+streamlit
+nemo_toolkit[asr]
+numpy==1.26.4
+Cython
+setuptools
+wheel
