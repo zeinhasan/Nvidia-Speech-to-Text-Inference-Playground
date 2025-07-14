@@ -1,13 +1,9 @@
 streamlit
-Cython
-setuptools
-wheel
-numpy==1.26.4
-
-nemo_toolkit[asr]
-
-# CPU-only Torch (no CUDA needed)
-torch==2.1.0+cpu
-torchaudio==2.1.0+cpu
-torchvision==0.16.0+cpu
---find-links https://download.pytorch.org/whl/torch_stable.html
+pytube
+moviepy
+librosa
+torch
+transformers
+datasets
+torchaudio
+accelerate
