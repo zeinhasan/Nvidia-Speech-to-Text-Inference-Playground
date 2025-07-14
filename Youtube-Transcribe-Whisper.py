@@ -6,6 +6,7 @@ import tempfile
 import librosa
 import torch
 import threading
+import time
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 # Load model sekali saja
@@ -109,7 +110,7 @@ if youtube_url:
 
             while thread.is_alive():
                 st.info("🔁 Transcribing in progress...")
-                st.sleep(1)
+                time.sleep(1)
             thread.join()
 
         st.success("✅ Transkripsi selesai!")
