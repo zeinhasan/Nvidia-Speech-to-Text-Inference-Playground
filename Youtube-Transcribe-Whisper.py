@@ -14,7 +14,7 @@ def load_asr_model_with_progress(_progress_callback):
     _progress_callback(0, "Loading model... (0%)")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
-    model_id = "openai/whisper-large-v3-turbo"
+    model_id = "openai/whisper-medium"
 
     _progress_callback(10, "Downloading model...")
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
