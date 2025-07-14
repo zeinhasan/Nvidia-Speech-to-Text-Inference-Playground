@@ -9,7 +9,6 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 # Load model sekali saja
 @st.cache_resource(show_spinner=False)
-@st.cache_resource(show_spinner=False)
 def load_asr_model_with_progress(_progress_callback):
     _progress_callback(0, "Loading model... (0%)")
     device = "cuda" if torch.cuda.is_available() else "cpu"
