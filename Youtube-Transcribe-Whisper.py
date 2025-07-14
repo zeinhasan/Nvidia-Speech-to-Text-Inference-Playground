@@ -9,13 +9,14 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 # Load model sekali saja
 @st.cache_resource(show_spinner=False)
-def load_asr_model_with_progress(progress_callback):
-    progress_callback(0, "Loading model... (0%)")
+@st.cache_resource(show_spinner=False)
+def load_asr_model_with_progress(_progress_callback):
+    _progress_callback(0, "Loading model... (0%)")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
-    model_id = "openai/whisper-medium"
+    model_id = "openai/whisper-large-v3-turbo"
 
-    progress_callback(10, "Downloading model...")
+    _progress_callback(10, "Downloading model...")
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         model_id,
         torch_dtype=torch_dtype,
@@ -25,7 +26,7 @@ def load_asr_model_with_progress(progress_callback):
 
     processor = AutoProcessor.from_pretrained(model_id)
 
-    progress_callback(95, "Setting up pipeline...")
+    _progress_callback(95, "Setting up pipeline...")
     pipe = pipeline(
         "automatic-speech-recognition",
         model=model,
@@ -35,8 +36,9 @@ def load_asr_model_with_progress(progress_callback):
         device=device,
     )
 
-    progress_callback(100, "Model loaded ✅")
+    _progress_callback(100, "Model loaded ✅")
     return pipe
+
 
 # Konversi MP4 ke WAV menggunakan ffmpeg-python
 def convert_to_wav_ffmpeg(video_path, audio_path):
