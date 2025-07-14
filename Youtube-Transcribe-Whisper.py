@@ -1,6 +1,7 @@
 import streamlit as st
 import os
-from pytube import YouTube
+from pytubefix import YouTube
+from pytubefix.cli import on_progress
 import ffmpeg
 import tempfile
 import librosa
@@ -8,7 +9,6 @@ import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 # Load model sekali saja
-# ✅ Cache hanya fungsi ini
 @st.cache_resource(show_spinner=False)
 def load_model_cached():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -34,15 +34,13 @@ def load_model_cached():
     )
     return pipe
 
-# ✅ Fungsi biasa (tidak di-cache) untuk tampilkan progress
+# Fungsi wrapper progress model
 def load_asr_model_with_progress(progress_callback):
     progress_callback(0, "Loading model... (0%)")
     progress_callback(20, "Downloading model files...")
     pipe = load_model_cached()
     progress_callback(100, "Model loaded ✅")
     return pipe
-
-
 
 # Konversi MP4 ke WAV menggunakan ffmpeg-python
 def convert_to_wav_ffmpeg(video_path, audio_path):
@@ -55,21 +53,29 @@ def convert_to_wav_ffmpeg(video_path, audio_path):
 
 # Fungsi download dan ekstrak audio
 def download_and_extract_audio(youtube_url, progress_callback):
-    progress_callback(10, "Downloading YouTube audio...")
-    yt = YouTube(youtube_url)
-    video_stream = yt.streams.filter(only_audio=True).first()
+    try:
+        progress_callback(10, "Downloading YouTube audio...")
+        yt = YouTube(youtube_url, on_progress_callback=on_progress)
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
-        video_path = temp_video.name
-        video_stream.download(filename=video_path)
+        stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
+        if stream is None:
+            raise ValueError("No audio stream found.")
 
-    progress_callback(60, "Converting to WAV...")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        audio_path = temp_audio.name
-        convert_to_wav_ffmpeg(video_path, audio_path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
+            video_path = temp_video.name
+            stream.download(filename=video_path)
 
-    progress_callback(100, "Audio ready ✅")
-    return audio_path
+        progress_callback(60, "Converting to WAV...")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            audio_path = temp_audio.name
+            convert_to_wav_ffmpeg(video_path, audio_path)
+
+        progress_callback(100, "Audio ready ✅")
+        return audio_path
+
+    except Exception as e:
+        st.error(f"❌ Gagal mengunduh atau mengonversi: {e}")
+        raise
 
 # Fungsi transkripsi
 def transcribe_audio(audio_path, pipe, progress_callback):
@@ -104,10 +110,12 @@ if youtube_url:
     st.video(youtube_url)
 
     if st.button("🚀 Start Transcription"):
+        # Load model
         st.subheader("1️⃣ Load Model")
         model_progress = st.progress(0, text="Initializing model...")
         pipe = load_asr_model_with_progress(lambda val, msg: model_progress.progress(val, text=msg))
 
+        # Download dan konversi audio
         st.subheader("2️⃣ Download & Convert Audio")
         audio_progress = st.progress(0, text="Downloading...")
         audio_path = download_and_extract_audio(youtube_url, lambda val, msg: audio_progress.progress(val, text=msg))
@@ -116,12 +124,14 @@ if youtube_url:
         with open(audio_path, "rb") as f:
             st.download_button("⬇️ Download Audio WAV", f, file_name="audio.wav")
 
+        # Transkripsi
         st.subheader("3️⃣ Transcribe Audio")
         transcribe_progress = st.progress(0, text="Memulai transkripsi...")
         segments = transcribe_audio(audio_path, pipe, lambda val, msg: transcribe_progress.progress(val, text=msg))
 
         st.success("✅ Transkripsi selesai!")
 
+        # Hasil
         st.subheader("📄 Hasil Transkripsi")
         full_text = ""
         for seg in segments:
