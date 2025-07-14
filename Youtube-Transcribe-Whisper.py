@@ -35,30 +35,43 @@ def load_model():
     return pipe
 
 # ---------------------- Convert m4a to wav ----------------------
-def convert_m4a_to_wav(m4a_path):
-    audio = AudioSegment.from_file(m4a_path, format="m4a")
-    wav_path = m4a_path.replace(".m4a", ".wav")
-    audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
-    return wav_path
+def convert_any_audio_to_wav(input_path):
+    try:
+        # Deteksi format dari ekstensi
+        ext = os.path.splitext(input_path)[1][1:]  # Contoh: 'webm', 'm4a'
+
+        audio = AudioSegment.from_file(input_path, format=ext)
+        audio = audio.set_frame_rate(16000).set_channels(1)  # Mono + 16kHz
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as out_file:
+            wav_path = out_file.name
+            audio.export(wav_path, format="wav")
+
+        return wav_path
+    except Exception as e:
+        raise RuntimeError(f"Gagal mengonversi audio: {e}")
 
 # ---------------------- Download YouTube Audio ----------------------
-def download_audio_m4a(youtube_url, progress_callback):
+def download_audio_fallback(youtube_url, progress_callback):
     progress_callback(10, "Mengunduh audio dari YouTube...")
     yt = YouTube(youtube_url, on_progress_callback=on_progress)
-    stream = yt.streams.filter(only_audio=True, subtype='m4a').order_by("abr").desc().first()
+
+    stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
 
     if stream is None:
-        raise ValueError("Tidak ditemukan stream audio .m4a")
+        raise ValueError("Tidak ditemukan stream audio.")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as temp_audio:
-        m4a_path = temp_audio.name
-        stream.download(filename=m4a_path)
+    ext = stream.subtype or "audio"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as temp_audio:
+        audio_path = temp_audio.name
+        stream.download(filename=audio_path)
 
-    progress_callback(60, "Mengonversi ke WAV...")
-    wav_path = convert_m4a_to_wav(m4a_path)
+    progress_callback(60, f"Mengonversi ke WAV dari .{ext}...")
+    wav_path = convert_any_audio_to_wav(audio_path)
 
     progress_callback(100, "Audio siap ✅")
     return wav_path
+
 
 # ---------------------- Transkripsi ----------------------
 def transcribe_audio(wav_path, pipe, progress_callback):
