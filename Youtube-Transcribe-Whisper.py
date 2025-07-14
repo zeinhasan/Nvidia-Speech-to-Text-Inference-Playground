@@ -111,7 +111,7 @@ if youtube_url:
 
         st.subheader("2️⃣ Mengunduh audio...")
         audio_progress = st.progress(0)
-        wav_path = download_audio_m4a(youtube_url, lambda v, t: audio_progress.progress(v, text=t))
+        wav_path = download_audio_fallback(youtube_url, lambda v, t: audio_progress.progress(v, text=t))
 
         st.success("✅ Audio berhasil diunduh dan dikonversi!")
         with open(wav_path, "rb") as f:
