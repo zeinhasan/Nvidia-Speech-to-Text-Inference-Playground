@@ -57,20 +57,19 @@ def download_audio_fallback(youtube_url, progress_callback):
     yt = YouTube(youtube_url, on_progress_callback=on_progress)
 
     stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
-
     if stream is None:
         raise ValueError("Tidak ditemukan stream audio.")
 
-    ext = stream.subtype or "audio"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as temp_audio:
-        audio_path = temp_audio.name
-        stream.download(filename=audio_path)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        downloaded_path = stream.download(output_path=tmpdir)
+        ext = os.path.splitext(downloaded_path)[1][1:]  # misalnya 'webm', 'm4a'
 
-    progress_callback(60, f"Mengonversi ke WAV dari .{ext}...")
-    wav_path = convert_any_audio_to_wav(audio_path)
+        progress_callback(60, f"Mengonversi ke WAV dari .{ext}...")
+        wav_path = convert_any_audio_to_wav(downloaded_path)
 
     progress_callback(100, "Audio siap ✅")
     return wav_path
+
 
 
 # ---------------------- Transkripsi ----------------------
